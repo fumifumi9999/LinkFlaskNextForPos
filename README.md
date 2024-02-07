@@ -1,6 +1,6 @@
 This is a Flask-Next.js repo
 
-### git clone https://github.com/fumifumi9999/LinkFlaskNext.git
+### git clone https://github.com/fumifumi9999/LinkFlaskNextForPos.git
 
 ■ backend
 - cd backend
@@ -14,4 +14,4 @@ This is a Flask-Next.js repo
 - npm install
 - npm run dev
 
-■ http://localhost:3000/customers にアクセス
+■ http://localhost:3000/pos にアクセス
