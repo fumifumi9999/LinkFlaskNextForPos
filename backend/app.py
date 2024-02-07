@@ -7,6 +7,8 @@ from db_control import crud, mymodels
 
 import requests
 
+from datetime import datetime
+
 # Azure Database for MySQL
 # REST APIでありCRUDを持っている
 app = Flask(__name__)
@@ -17,54 +19,43 @@ CORS(app)
 def index():
     return "<p>Flask top page!</p>"
  
-@app.route("/customers", methods=['POST'])
-def create_customer():
-    values = request.get_json()
-    # values = {
-    #     "customer_id": "C005",
-    #     "customer_name": "佐藤Aこ",
-    #     "age": 64,
-    #     "gender": "女"
-    # }
-    tmp = crud.myinsert(mymodels.Customers, values)
-    result = crud.myselect(mymodels.Customers, values.get("customer_id"))
+
+@app.route("/product", methods=['GET'])
+def read_product():
+    model = mymodels.Product
+    target_code = request.args.get('code') #クエリパラメータ
+    result = crud.myselect(mymodels.Product, target_code, "code")
     return result, 200
 
-@app.route("/customers", methods=['GET'])
-def read_one_customer():
-    model = mymodels.Customers
-    target_id = request.args.get('customer_id') #クエリパラメータ
-    result = crud.myselect(mymodels.Customers, target_id)
-    return result, 200
+@app.route("/purchase", methods=['POST'])
+def purchase():
+    transactionData = request.get_json()
+    total_amount = 0
 
-@app.route("/allcustomers", methods=['GET'])
-def read_all_customer():
-    model = mymodels.Customers
-    result = crud.myselectAll(mymodels.Customers)
-    return result, 200
+    # 1-1 Register transaction
+    cashier_code = transactionData["transactionInfo"]["cashier_code"] if transactionData["transactionInfo"]["cashier_code"] != '' else '9999999999'
+    transaction_id = crud.myinsertOne(mymodels.Trade, {
+        "datetime": datetime.now(),
+        "emp_cd": cashier_code,
+        "store_cd": transactionData["transactionInfo"]["store_code"],
+        "pos_cd": transactionData["transactionInfo"]["pos_id"],
+        "total_amt": 0
+    })
 
-@app.route("/customers", methods=['PUT'])
-def update_customer():
-    print("I'm in")
-    values = request.get_json()
-    values_original = values.copy()
-    model = mymodels.Customers
-    # values = {  "customer_id": "C004",
-    #             "customer_name": "鈴木C子",
-    #             "age": 44,
-    #             "gender": "男"}
-    tmp = crud.myupdate(model, values)
-    result = crud.myselect(mymodels.Customers, values_original.get("customer_id"))
-    return result, 200
 
-@app.route("/customers", methods=['DELETE'])
-def delete_customer():
-    model = mymodels.Customers
-    target_id = request.args.get('customer_id') #クエリパラメータ
-    result = crud.mydelete(model, target_id)
-    return result, 200
+    # 1-2 Register transaction details and calculate total amount
+    for item in transactionData.get('items', []):
+        crud.myinsertMultiple(mymodels.Trade_detail, {
+            "trd_id": transaction_id,
+            "prd_id": item.get('id'),
+            "prd_code": item.get('code'),
+            "prd_name": item.get('name'),
+            "prd_price": item.get('price')
+        })
+        total_amount += item.get('price', 0)
 
-@app.route("/fetchtest")
-def fetchtest():
-    response = requests.get('https://jsonplaceholder.typicode.com/users')
-    return response.json(), 200
+    status = crud.myupdate(mymodels.Trade, {
+        "total_amt": total_amount
+    }, transaction_id, "id")
+    # 1-5 Return total amount to the front end
+    return jsonify({"success": True, "total_amount": total_amount}), 200

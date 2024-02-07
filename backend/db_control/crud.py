@@ -2,22 +2,53 @@
 import platform
 print("platform", platform.uname())
  
-
+ 
 from sqlalchemy import create_engine, insert, delete, update, select
 import sqlalchemy
 from sqlalchemy.orm import sessionmaker
 import json
 import pandas as pd
-
+import datetime
+ 
 from db_control.connect import engine
-from db_control.mymodels import Customers
+from db_control import create_tables # 初回だけコメントアウトを消す
+
  
 
-def myinsert(mymodel, values):
+def datetime_handler(x):
+
+    if isinstance(x, datetime.datetime):
+
+        return x.isoformat()
+    raise TypeError("Unknown type")
+ 
+def myinsertOne(mymodel, values):
     # session構築
     Session = sessionmaker(bind=engine)
     session = Session()
+ 
+    query = insert(mymodel).values(values)
+    try:
+        # トランザクションを開始
+        with session.begin():
+            # データの挿入
+            result = session.execute(query)
+            session.flush()  # Ensure all data is flushed before commit
+            inserted_primary_key = result.inserted_primary_key[0]  # 取引一意キーのidを取得
+    except sqlalchemy.exc.IntegrityError:
+        print("一意制約違反により、挿入に失敗しました")
+        session.rollback()
+        return None  # Insertion failed due to IntegrityError
+ 
+    # セッションを閉じる
+    session.close()
+    return inserted_primary_key  # 取引一意キーのidをreturn
 
+def myinsertMultiple(mymodel, values):
+    # session構築
+    Session = sessionmaker(bind=engine)
+    session = Session()
+ 
     query = insert(mymodel).values(values)
     try:
         # トランザクションを開始
@@ -30,36 +61,37 @@ def myinsert(mymodel, values):
  
     # セッションを閉じる
     session.close()
-    return "inserted"
- 
-def myselect(mymodel, customer_id):
+    return "multiple inserted"
+
+def myselect(mymodel, key_value, key_name):
     # session構築
     Session = sessionmaker(bind=engine)
     session = Session()
-    query = session.query(mymodel).filter(mymodel.customer_id == customer_id)
+   
+    if key_value == "last": #key_valueにlastが入ってくると最新で登録された情報を返す
+        query = session.query(mymodel).order_by(getattr(mymodel, key_name).desc()).limit(1)
+    else:
+        query = session.query(mymodel).filter(getattr(mymodel, key_name) == key_value)
     try:
         # トランザクションを開始
         with session.begin():
             result = query.all()
         # 結果をオブジェクトから辞書に変換し、リストに追加
         result_dict_list = []
-        for customer_info in result:
-            result_dict_list.append({
-                "customer_id": customer_info.customer_id,
-                "customer_name": customer_info.customer_name,
-                "age": customer_info.age,
-                "gender": customer_info.gender
-            })
+        for row in result:
+            row_dict = {column.key: getattr(row, column.key) for column in mymodel.__table__.columns}
+            result_dict_list.append(row_dict)
         # リストをJSONに変換
-        result_json = json.dumps(result_dict_list, ensure_ascii=False)
+        # result_json = json.dumps(result_dict_list, ensure_ascii=False)
+        result_json = json.dumps(result_dict_list, ensure_ascii=True, default=datetime_handler)
+ 
     except sqlalchemy.exc.IntegrityError:
         print("一意制約違反により、挿入に失敗しました")
-
+ 
     # セッションを閉じる
     session.close()
     return result_json
-
-
+ 
 def myselectAll(mymodel):
     # session構築
     Session = sessionmaker(bind=engine)
@@ -69,25 +101,46 @@ def myselectAll(mymodel):
         # トランザクションを開始
         with session.begin():
             df = pd.read_sql_query(query, con=engine)
+            # 日付が存在する場合、指定された形式に変換
+            for column in df.columns:
+                if pd.api.types.is_datetime64_any_dtype(df[column]):
+                    df[column] = pd.to_datetime(df[column], unit='ms').dt.strftime('%Y-%m-%dT%H:%M:%S.%f')
             result_json = df.to_json(orient='records', force_ascii=False)
-
+ 
     except sqlalchemy.exc.IntegrityError:
         print("一意制約違反により、挿入に失敗しました")
         result_json = None
-
+ 
     # セッションを閉じる
     session.close()
     return result_json
-
-def myupdate(mymodel, values):
+ 
+def myupdate(mymodel, values, key_value, key_name):
     # session構築
     Session = sessionmaker(bind=engine)
     session = Session()
-
-    customer_id = values.pop("customer_id")
  
-    # query = update(Customers).where(Customers.customer_id=="C004").values(customer_name="鈴木C子", age=44)
-    query = update(mymodel).where(mymodel.customer_id==customer_id).values(**values)
+    print(values)
+ 
+    query = update(mymodel).where(getattr(mymodel, key_name)==key_value).values(**values)
+    try:
+        # トランザクションを開始
+        with session.begin():
+            result = session.execute(query)
+    except sqlalchemy.exc.IntegrityError as e:
+        print("更新中にエラーが発生しました:", e)
+        session.rollback()
+        return None  # エラーが発生した場合はNoneを返す
+    finally:
+        # セッションを閉じる
+        session.close()
+    return str(key_value) + " is updated"
+ 
+def mydelete(mymodel, key_value, key_name):
+    # session構築
+    Session = sessionmaker(bind=engine)
+    session = Session()
+    query = delete(mymodel).where(getattr(mymodel, key_name)==key_value)
     try:
         # トランザクションを開始
         with session.begin():
@@ -95,23 +148,8 @@ def myupdate(mymodel, values):
     except sqlalchemy.exc.IntegrityError:
         print("一意制約違反により、挿入に失敗しました")
         session.rollback()
-    # セッションを閉じる
-    session.close()
-    return "put"
-
-def mydelete(mymodel, customer_id):
-    # session構築
-    Session = sessionmaker(bind=engine)
-    session = Session()
-    query = delete(mymodel).where(mymodel.customer_id==customer_id)
-    try:
-        # トランザクションを開始
-        with session.begin():
-            result = session.execute(query)
-    except sqlalchemy.exc.IntegrityError:
-        print("一意制約違反により、挿入に失敗しました")
-        session.rollback()
  
     # セッションを閉じる
     session.close()
-    return customer_id + " is deleted"
+    return str(key_value) + " is deleted"
+ 
