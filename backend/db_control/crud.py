@@ -137,19 +137,20 @@ def myupdate(mymodel, values, key_value, key_name):
     return str(key_value) + " is updated"
  
 def mydelete(mymodel, key_value, key_name):
-    # session構築
     Session = sessionmaker(bind=engine)
     session = Session()
+    
+    # 指定されたモデルから、キー名とキー値に一致するレコードを削除するクエリを作成します。
     query = delete(mymodel).where(getattr(mymodel, key_name)==key_value)
+    
     try:
-        # トランザクションを開始
         with session.begin():
             result = session.execute(query)
     except sqlalchemy.exc.IntegrityError:
         print("一意制約違反により、挿入に失敗しました")
         session.rollback()
- 
-    # セッションを閉じる
+
     session.close()
+    
     return str(key_value) + " is deleted"
  
