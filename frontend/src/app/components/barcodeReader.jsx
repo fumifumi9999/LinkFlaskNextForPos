@@ -1,46 +1,20 @@
 "use client"
-import React, { useState, useEffect } from 'react';
-import { BrowserMultiFormatReader } from '@zxing/library';
-import Webcam from 'react-webcam';
+import { useState } from 'react';
+import { useZxing } from 'react-zxing';
 
-const BarcodeReader = () => {
-  const [barcode, setBarcode] = useState('');
-
-  const webcamRef = React.useRef(null);
-  const codeReader = new BrowserMultiFormatReader();
-
-  const capture = React.useCallback(() => {
-    const imageSrc = webcamRef.current.getScreenshot();
-    if (imageSrc) {
-      codeReader.decodeFromImage(undefined, imageSrc).then((result) => {
-        console.log(result);
-        setBarcode(result.text);
-      }).catch((err) => {
-        console.error(err);
-      });
-    }
-  }, [codeReader]);
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      capture();
-    }, 1000);
-
-    return () => clearInterval(interval);
-  }, [capture]);
+const BarcodeReader = ({ onBarcodeScanned }) => {
+  const [result, setResult] = useState("");
+  const { ref } = useZxing({
+    onDecodeResult(result) {
+      setResult(result.getText());
+      onBarcodeScanned(result.getText()); // 親コンポーネントにバーコード値を渡す
+    },
+  });
 
   return (
     <>
-      <Webcam
-        audio={false}
-        ref={webcamRef}
-        screenshotFormat="image/jpeg"
-        width="100%"
-        videoConstraints={{
-          facingMode: "environment"
-        }}
-      />
-      {barcode && <p>バーコード: {barcode}</p>}
+      {!result && <video ref={ref} style={{ width: '100%' }} />}
+      {result && <p>{result}</p>}
     </>
   );
 };

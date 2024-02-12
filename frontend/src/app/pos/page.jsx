@@ -1,15 +1,18 @@
 "use client"
 import React, { useRef, useState } from 'react';
+import BarcodeReader from '../components/BarcodeReader';
 
 const POSPage = () => {
     // 商品コード入力用のrefを作成
     const productCodeRef = useRef(null);
+    const [productCode, setProductCode] = useState(null);
     const [productData, setProductData] = useState(null);
     const [purchaseList, setPurchaseList] = useState([]);
 
     // for popup
     const [showPopup, setShowPopup] = useState(false);
     const [totalAmountWithTax, setTotalAmountWithTax] = useState(0);
+    const [showScanner, setShowScanner] = useState(false); // スキャナー表示用のステート
 
     // 商品コード読み込みボタンのイベントハンドラー
     const handleLoadProduct = async () => {
@@ -42,6 +45,8 @@ const POSPage = () => {
             if (productCodeRef.current) {
                 productCodeRef.current.value = ''; // 商品コード入力欄をクリア
             }
+            setProductCode(null);
+            setShowScanner(null);
         }
     };
 
@@ -86,22 +91,47 @@ const POSPage = () => {
         }
     };
 
+    // バーコード読み取り後の処理
+    const handleBarcodeScanned = (barcode) => {
+        if (productCodeRef.current) {
+            productCodeRef.current.value = barcode; // フォームにバーコード値を設定
+            setShowScanner(false); // スキャナーを非表示にする
+        }
+    };
+
     return (
         <>
+
             <div className="border-2 border-gray-300 p-4 rounded-lg shadow-md m-4">
                 <div className="flex">
                     <div className="flex-1 bg-blue-100 m-2 p-2">
                         {/* コード入力エリア */}
+
+                        <button onClick={() => setShowScanner(!showScanner)}
+                            className="btn btn-secondary flex flex-col items-center w-full mb-2"
+                        >
+                            カメラからスキャン
+                        </button>
                         <div className="flex flex-col items-center w-full mb-4">
-                            <div className="w-full m-2">
-                                <input
-                                    ref={productCodeRef} // refをinputに紐付ける
-                                    type="text"
-                                    placeholder="コードを入力"
-                                    name="productCode"
-                                    className="input input-bordered w-full"
-                                />
-                            </div>
+                            {(showScanner && !productCode) ? (
+                                <BarcodeReader onBarcodeScanned={(barcode) => {
+                                    handleBarcodeScanned(barcode);
+                                    if (!productCode){
+                                        setProductCode(barcode);
+                                    }
+                                }} />
+                            ) : (
+                                <div className="w-full m-2">
+                                    <input
+                                        ref={productCodeRef} // refをinputに紐付ける
+                                        type="text"
+                                        placeholder="コードを入力"
+                                        name="productCode"
+                                        className="input input-bordered w-full"
+                                        value={productCode}
+                                    />
+                                </div>
+                            )}
                             <button
                                 onClick={handleLoadProduct} // イベントハンドラーをボタンに紐付ける
                                 className="btn btn-primary m-2 w-full">
@@ -175,26 +205,28 @@ const POSPage = () => {
                         </div>
                     </div>
                 </div>
-            </div>
+            </div >
 
             {/* ポップアップ */}
-            {showPopup && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center">
-                    <div className="bg-white p-4 rounded-lg shadow-lg text-center">
-                        <h2 className="text-lg font-bold">購入完了</h2>
-                        <p>合計金額（10%税込）: {totalAmountWithTax.toFixed(0)}円</p>
-                        <button
-                            className="btn btn-primary mt-4 mx-auto"
-                            onClick={() => {
-                                setShowPopup(false); // ポップアップを閉じる
-                                setPurchaseList([]); // 購入リストをリセット
-                            }}
-                        >
-                            OK
-                        </button>
+            {
+                showPopup && (
+                    <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center">
+                        <div className="bg-white p-4 rounded-lg shadow-lg text-center">
+                            <h2 className="text-lg font-bold">購入完了</h2>
+                            <p>合計金額（10%税込）: {totalAmountWithTax.toFixed(0)}円</p>
+                            <button
+                                className="btn btn-primary mt-4 mx-auto"
+                                onClick={() => {
+                                    setShowPopup(false); // ポップアップを閉じる
+                                    setPurchaseList([]); // 購入リストをリセット
+                                }}
+                            >
+                                OK
+                            </button>
+                        </div>
                     </div>
-                </div>
-            )}
+                )
+            }
         </>
     );
 };
