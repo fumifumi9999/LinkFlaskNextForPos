@@ -2,7 +2,7 @@ This is a Flask-Next.js repo
 
 ### git clone https://github.com/fumifumi9999/LinkFlaskNextForPos.git
 
-■ backend
+■ backend: python 3.11.7推奨
 - cd backend
 - python3 -m venv backend_venv
 - ./backend_env/Script/activate.ps1 (powershellの場合)
